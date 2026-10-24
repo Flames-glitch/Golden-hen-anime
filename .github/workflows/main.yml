@@ -28,52 +28,64 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Locate Android project
-        id: locate
+      - name: Extract Golden Hen V2 ZIP
+        id: extract
         shell: bash
         run: |
           set -euo pipefail
 
-          if [[ -f settings.gradle.kts || -f settings.gradle ]]; then
-            project_dir='.'
-          else
-            roots=()
-
-            while IFS= read -r -d '' match; do
-              roots+=("$(dirname "$match")")
-            done < <(
-              find . -mindepth 2 -maxdepth 5 -type f \
-                \( -name 'settings.gradle.kts' -o -name 'settings.gradle' \) \
-                -not -path './.git/*' -print0
-            )
-
-            if [[ ${#roots[@]} -ne 1 ]]; then
-              echo "Expected exactly one Android Gradle project; found ${#roots[@]}." >&2
-              echo "Check that the project source files are uploaded." >&2
-              find . -maxdepth 4 -type f \
-                \( -name 'settings.gradle*' -o -name 'build.gradle*' \) -print
-              exit 1
+          archive=''
+          for candidate in \
+            Golden_Hen_V2_Android_GitHub_READY_20261024.zip \
+            GoldenHen_V2_GitHub_Root_Fixed.zip \
+            GoldenHen_Android_Repo_v0.2.zip; do
+            if [[ -f "$candidate" ]]; then
+              archive="$candidate"
+              break
             fi
+          done
 
-            project_dir="${roots[0]}"
-          fi
-
-          if [[ ! -f "$project_dir/app/build.gradle.kts" && ! -f "$project_dir/app/build.gradle" ]]; then
-            echo "Android app module not found." >&2
+          if [[ -z "$archive" ]]; then
+            echo 'No supported Golden Hen V2 ZIP found.' >&2
+            echo 'Available ZIP files:' >&2
+            find . -maxdepth 1 -type f -iname '*.zip' -print
             exit 1
           fi
 
-          echo "Found project at: $project_dir"
+          echo "Using source archive: $archive"
+          target="$RUNNER_TEMP/goldenhen-source"
+          mkdir -p "$target"
+          unzip -q "$archive" -d "$target"
+
+          mapfile -d '' -t settings_files < <(
+            find "$target" -maxdepth 7 -type f \
+              \( -name 'settings.gradle.kts' -o -name 'settings.gradle' \) -print0
+          )
+
+          if [[ ${#settings_files[@]} -ne 1 ]]; then
+            echo "Expected one Gradle project in ZIP; found ${#settings_files[@]}." >&2
+            exit 1
+          fi
+
+          project_dir="$(dirname "${settings_files[0]}")"
+
+          if [[ ! -f "$project_dir/app/build.gradle.kts" && \
+                ! -f "$project_dir/app/build.gradle" ]]; then
+            echo 'Android app module is missing from the ZIP.' >&2
+            exit 1
+          fi
+
+          echo "Found Android project: $project_dir"
           echo "dir=$project_dir" >> "$GITHUB_OUTPUT"
 
       - name: Build debug APK
         env:
-          PROJECT_DIR: ${{ steps.locate.outputs.dir }}
-        run: gradle --no-daemon --project-dir "$PROJECT_DIR" assembleDebug
+          PROJECT_DIR: ${{ steps.extract.outputs.dir }}
+        run: gradle --no-daemon --project-dir "$PROJECT_DIR" assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: GoldenHen-v0.2-debug-apk
-          path: ${{ steps.locate.outputs.dir }}/app/build/outputs/apk/debug/*.apk
+          path: ${{ steps.extract.outputs.dir }}/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
