@@ -9,7 +9,6 @@ on:
 jobs:
   android:
     runs-on: ubuntu-latest
-
     permissions:
       contents: read
 
@@ -28,64 +27,66 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Extract Golden Hen V2 ZIP
-        id: extract
+      - name: Find or extract Golden Hen project
+        id: source
         shell: bash
         run: |
           set -euo pipefail
 
-          archive=''
-          for candidate in \
-            Golden_Hen_V2_Android_GitHub_READY_20261024.zip \
-            GoldenHen_V2_GitHub_Root_Fixed.zip \
-            GoldenHen_Android_Repo_v0.2.zip; do
-            if [[ -f "$candidate" ]]; then
-              archive="$candidate"
-              break
+          if [[ -f settings.gradle.kts || -f settings.gradle ]]; then
+            project_dir="$GITHUB_WORKSPACE"
+          else
+            project_dir=''
+
+            for archive in \
+              GoldenHen_v0.3_GitHub_Source.zip \
+              Golden_Hen_V2_Android_GitHub_READY_20261024.zip \
+              GoldenHen_V2_GitHub_Root_Fixed.zip \
+              GoldenHen_Android_Repo_v0.2.zip; do
+              if [[ -f "$archive" ]]; then
+                echo "Found source ZIP: $archive"
+                target="$RUNNER_TEMP/goldenhen-extracted"
+                mkdir -p "$target"
+                unzip -q "$archive" -d "$target"
+
+                mapfile -d '' -t settings_files < <(
+                  find "$target" -maxdepth 8 -type f \
+                    \( -name 'settings.gradle.kts' -o -name 'settings.gradle' \) -print0
+                )
+
+                if [[ ${#settings_files[@]} -ne 1 ]]; then
+                  echo "Expected exactly one Gradle project in ZIP; found ${#settings_files[@]}" >&2
+                  exit 1
+                fi
+
+                project_dir="$(dirname "${settings_files[0]}")"
+                break
+              fi
+            done
+
+            if [[ -z "$project_dir" ]]; then
+              echo 'No extracted project or supported Golden Hen ZIP found.' >&2
+              find . -maxdepth 2 -type f -print
+              exit 1
             fi
-          done
+          fi
 
-          if [[ -z "$archive" ]]; then
-            echo 'No supported Golden Hen V2 ZIP found.' >&2
-            echo 'Available ZIP files:' >&2
-            find . -maxdepth 1 -type f -iname '*.zip' -print
+          if [[ ! -f "$project_dir/app/build.gradle.kts" && ! -f "$project_dir/app/build.gradle" ]]; then
+            echo "Missing Android app module in $project_dir/app" >&2
             exit 1
           fi
 
-          echo "Using source archive: $archive"
-          target="$RUNNER_TEMP/goldenhen-source"
-          mkdir -p "$target"
-          unzip -q "$archive" -d "$target"
-
-          mapfile -d '' -t settings_files < <(
-            find "$target" -maxdepth 7 -type f \
-              \( -name 'settings.gradle.kts' -o -name 'settings.gradle' \) -print0
-          )
-
-          if [[ ${#settings_files[@]} -ne 1 ]]; then
-            echo "Expected one Gradle project in ZIP; found ${#settings_files[@]}." >&2
-            exit 1
-          fi
-
-          project_dir="$(dirname "${settings_files[0]}")"
-
-          if [[ ! -f "$project_dir/app/build.gradle.kts" && \
-                ! -f "$project_dir/app/build.gradle" ]]; then
-            echo 'Android app module is missing from the ZIP.' >&2
-            exit 1
-          fi
-
-          echo "Found Android project: $project_dir"
+          echo "Building project at: $project_dir"
           echo "dir=$project_dir" >> "$GITHUB_OUTPUT"
 
       - name: Build debug APK
         env:
-          PROJECT_DIR: ${{ steps.extract.outputs.dir }}
+          PROJECT_DIR: ${{ steps.source.outputs.dir }}
         run: gradle --no-daemon --project-dir "$PROJECT_DIR" assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: GoldenHen-v0.2-debug-apk
-          path: ${{ steps.extract.outputs.dir }}/app/build/outputs/apk/debug/*.apk
+          name: GoldenHen-v0.3-debug-apk
+          path: ${{ steps.source.outputs.dir }}/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
