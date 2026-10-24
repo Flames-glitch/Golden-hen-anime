@@ -49,11 +49,9 @@ jobs:
 
             if [[ ${#roots[@]} -ne 1 ]]; then
               echo "Expected exactly one Android Gradle project; found ${#roots[@]}." >&2
-              echo 'Check the Android project files.' >&2
-
+              echo "Check that the project source files are uploaded." >&2
               find . -maxdepth 4 -type f \
                 \( -name 'settings.gradle*' -o -name 'build.gradle*' \) -print
-
               exit 1
             fi
 
@@ -61,7 +59,7 @@ jobs:
           fi
 
           if [[ ! -f "$project_dir/app/build.gradle.kts" && ! -f "$project_dir/app/build.gradle" ]]; then
-            echo "No Android app Gradle module in $project_dir/app" >&2
+            echo "Android app module not found." >&2
             exit 1
           fi
 
