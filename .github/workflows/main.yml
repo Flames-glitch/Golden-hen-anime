@@ -26,7 +26,7 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Assemble and verify Golden Hen v0.3.4
+      - name: Assemble and verify Golden Hen v0.3.5
         id: source
         shell: bash
         run: |
@@ -50,17 +50,31 @@ jobs:
             test -f app/src/main/res/mipmap-hdpi/ic_launcher.png
             grep -Fq 'versionName = "0.3.4"' app/build.gradle.kts
           )
+          patch035='patches/GoldenHen-v0.3.5-from-v0.3.4.patch.gz.b64'
+          test -f "$patch035" || { echo "Missing v0.3.5 source patch." >&2; exit 1; }
+          base64 -d "$patch035" | gzip -dc > "$RUNNER_TEMP/GoldenHen-v035.patch"
+          (
+            cd "$dest"
+            patch --batch --fuzz=0 -p1 < "$RUNNER_TEMP/GoldenHen-v035.patch"
+            echo 'a3e2c955944be84d2c9e02f37596cf92fdbae18911adbc1f8cb5ff431ee1bee8  app/build.gradle.kts' | sha256sum -c -
+            echo 'c8202d2f063c87f3481e577fc8520c3ac72a50ec971ced4f2eb875892e68dd45  app/src/main/java/com/goldenhen/anime/AnimepaheFeed.kt' | sha256sum -c -
+            echo '01e86ab3198716271fe4c398be7f16e566873f5a752fb0dfc8972328182571e6  app/src/main/java/com/goldenhen/anime/MainActivity.kt' | sha256sum -c -
+            echo 'c4e46f0fbc2e3c3655bef3e9b3aa23f308e2a905c4f07e696252d9f6c8351811  app/src/main/java/com/goldenhen/anime/AnimeSiteScreen.kt' | sha256sum -c -
+            test -f app/src/main/res/mipmap-hdpi/ic_launcher.png
+            test -f app/src/main/java/com/goldenhen/anime/AppDiagnostics.kt
+            grep -Fq 'versionName = "0.3.5"' app/build.gradle.kts
+          )
           echo "dir=$dest" >> "$GITHUB_OUTPUT"
-          echo 'Confirmed v0.3.4 diagnostic logging source and retained launcher icon.'
+          echo 'Confirmed v0.3.5 Animepahe poster grid, diagnostics and retained launcher icon.'
 
       - name: Build debug APK
         env:
           PROJECT_DIR: ${{ steps.source.outputs.dir }}
         run: gradle --no-daemon --project-dir "$PROJECT_DIR" assembleDebug --stacktrace
 
-      - name: Upload v0.3.4 APK
+      - name: Upload v0.3.5 APK
         uses: actions/upload-artifact@v4
         with:
-          name: GoldenHen-v0.3.4-debug-apk
+          name: GoldenHen-v0.3.5-debug-apk
           path: ${{ steps.source.outputs.dir }}/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
