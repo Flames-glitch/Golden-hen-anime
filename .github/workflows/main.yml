@@ -56,8 +56,10 @@ jobs:
           (
             cd "$dest"
             patch --batch --fuzz=0 -p1 < "$RUNNER_TEMP/GoldenHen-v035.patch"
+            # Compile fix: qualify Android WebSettings rather than relying on an import.
+            sed -i 's/WebSettings\.MIXED_CONTENT_NEVER_ALLOW/android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW/' app/src/main/java/com/goldenhen/anime/AnimepaheFeed.kt
             echo 'a3e2c955944be84d2c9e02f37596cf92fdbae18911adbc1f8cb5ff431ee1bee8  app/build.gradle.kts' | sha256sum -c -
-            echo 'c8202d2f063c87f3481e577fc8520c3ac72a50ec971ced4f2eb875892e68dd45  app/src/main/java/com/goldenhen/anime/AnimepaheFeed.kt' | sha256sum -c -
+            echo 'defa333d1c958a4a62121ab47e8cd5f68fbf8577fba5f9d250a2905b2101fa99  app/src/main/java/com/goldenhen/anime/AnimepaheFeed.kt' | sha256sum -c -
             echo '01e86ab3198716271fe4c398be7f16e566873f5a752fb0dfc8972328182571e6  app/src/main/java/com/goldenhen/anime/MainActivity.kt' | sha256sum -c -
             echo 'c4e46f0fbc2e3c3655bef3e9b3aa23f308e2a905c4f07e696252d9f6c8351811  app/src/main/java/com/goldenhen/anime/AnimeSiteScreen.kt' | sha256sum -c -
             test -f app/src/main/res/mipmap-hdpi/ic_launcher.png
