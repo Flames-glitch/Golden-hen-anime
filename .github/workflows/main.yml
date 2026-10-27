@@ -26,40 +26,41 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Extract and verify Golden Hen v0.3.2
+      - name: Assemble and verify Golden Hen v0.3.4
         id: source
         shell: bash
         run: |
           set -euo pipefail
           archive='GoldenHen_v0.3.2_GitHub_Source.zip'
-          if [[ ! -f "$archive" ]]; then
-            echo "ERROR: Required source ZIP $archive missing at repository root." >&2
-            echo 'Older Golden Hen ZIPs are ignored deliberately.' >&2
-            ls -lah
-            exit 1
-          fi
-          echo "SHA-256: $(sha256sum "$archive")"
-          dest="$RUNNER_TEMP/goldenhen-v032"
+          patch64='patches/GoldenHen-v0.3.4-from-v0.3.2.patch.gz.b64'
+          test -f "$archive" || { echo "Missing base source: $archive" >&2; exit 1; }
+          test -f "$patch64" || { echo "Missing v0.3.4 source patch: $patch64" >&2; exit 1; }
+
+          dest="$RUNNER_TEMP/goldenhen-v034"
           mkdir -p "$dest"
           unzip -q "$archive" -d "$dest"
-          test -f "$dest/settings.gradle.kts"
-          test -f "$dest/app/build.gradle.kts"
-          test -f "$dest/app/src/main/java/com/goldenhen/anime/CrashDiagnostics.kt"
-          test -f "$dest/app/src/main/java/com/goldenhen/anime/AnimeSiteScreen.kt"
-          test -f "$dest/app/src/main/res/mipmap-hdpi/ic_launcher.png"
-          grep -Fq 'versionName = "0.3.2"' "$dest/app/build.gradle.kts"
-          grep -Fq 'GoldenHenApplication' "$dest/app/src/main/AndroidManifest.xml"
+          base64 -d "$patch64" | gzip -dc > "$RUNNER_TEMP/GoldenHen-v034.patch"
+          (
+            cd "$dest"
+            patch --batch --fuzz=0 -p1 < "$RUNNER_TEMP/GoldenHen-v034.patch"
+            echo '61e8e24065377f9346e248f7d6dee774e16b3660e0533d32784a7bb3e6e3177f  app/build.gradle.kts' | sha256sum -c -
+            echo 'b1a67c30af01fbb28c8cdfead3a7c6ba4f49b7c81c02d4bb8ed4e19e7b6c9cb7  app/src/main/java/com/goldenhen/anime/AppDiagnostics.kt' | sha256sum -c -
+            echo 'eb5a92e7120472a648f7f6fc1f06b579f13d520768439b75e8a0c8e3ba84ba46  app/src/main/java/com/goldenhen/anime/DiagnosticsScreen.kt' | sha256sum -c -
+            echo '0c5ca470f32145afcbc1ed148dc874cd355cd290a7fdd47ae69f0bec28aeea59  app/src/main/java/com/goldenhen/anime/MainActivity.kt' | sha256sum -c -
+            test -f app/src/main/res/mipmap-hdpi/ic_launcher.png
+            grep -Fq 'versionName = "0.3.4"' app/build.gradle.kts
+          )
           echo "dir=$dest" >> "$GITHUB_OUTPUT"
-          echo 'Confirmed v0.3.2 source, crash diagnostics and rooster launcher icon.'
+          echo 'Confirmed v0.3.4 diagnostic logging source and retained launcher icon.'
 
       - name: Build debug APK
         env:
           PROJECT_DIR: ${{ steps.source.outputs.dir }}
         run: gradle --no-daemon --project-dir "$PROJECT_DIR" assembleDebug --stacktrace
 
-      - name: Upload v0.3.2 APK
+      - name: Upload v0.3.4 APK
         uses: actions/upload-artifact@v4
         with:
-          name: GoldenHen-v0.3.2-debug-apk
+          name: GoldenHen-v0.3.4-debug-apk
           path: ${{ steps.source.outputs.dir }}/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
